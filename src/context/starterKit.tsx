@@ -1,19 +1,24 @@
 import { createContext, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { getUserByAddress, getUserById, getUserByIds } from '../queries/users';
-import { IAccount, IHive, IUser } from '../types';
+import { getUserByAddress } from '../queries/users';
+import { IAccount, IPlatform, IUser } from '../types';
 import { useChainId } from '../hooks/useChainId';
+import { getPlatformsByOwner } from '../queries/platform';
 
 const StarterKitContext = createContext<{
   user?: IUser;
   account?: IAccount;
   isActiveDelegate: boolean;
+  ownedPlatforms: IPlatform[];
+  isAdmin: boolean;
   refreshData?: () => void;
   loading: boolean;
 }>({
   user: undefined,
   account: undefined,
   isActiveDelegate: false,
+  ownedPlatforms: [],
+  isAdmin: false,
   loading: true,
 });
 
@@ -22,6 +27,8 @@ const StarterKitProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<IUser | undefined>();
   const account = useAccount();
   const [isActiveDelegate, setIsActiveDelegate] = useState(false);
+  const [ownedPlatforms, setOwnedPlatforms] = useState<IPlatform[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -47,6 +54,18 @@ const StarterKitProvider = ({ children }: { children: ReactNode }) => {
             (process.env.NEXT_PUBLIC_DELEGATE_ADDRESS as string).toLowerCase(),
           ) !== -1,
       );
+
+      const ownedPlatformsResponse = await getPlatformsByOwner(chainId, currentUser.address);
+      const ownedPlatforms: IPlatform[] = ownedPlatformsResponse?.data?.data?.platforms;
+      setOwnedPlatforms(ownedPlatforms);
+      if (ownedPlatforms) {
+        const isAdmin =
+          ownedPlatforms.filter(p => p.id === process.env.NEXT_PUBLIC_PLATFORM_ID).length > 0;
+        if (isAdmin) {
+          setIsAdmin(true);
+        }
+      }
+
       setLoading(false);
       return true;
     } catch (err: any) {
@@ -73,11 +92,13 @@ const StarterKitProvider = ({ children }: { children: ReactNode }) => {
     return {
       user,
       account: account ? account : undefined,
+      ownedPlatforms,
+      isAdmin,
       isActiveDelegate,
       refreshData: fetchData,
       loading,
     };
-  }, [account.address, user?.id, isActiveDelegate, loading]);
+  }, [account.address, user?.id, isActiveDelegate, ownedPlatforms, loading]);
 
   return <StarterKitContext.Provider value={value}>{children}</StarterKitContext.Provider>;
 };
